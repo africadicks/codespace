@@ -28,7 +28,7 @@ jobs:
           from tqdm import tqdm
 
           URL = "https://projectech.kendall-r.workers.dev/"
-          MAX_CONCURRENCY = 500
+          MAX_CONCURRENCY = 400
           TOTAL_REQUESTS = 999999  # 可以改成更多轮次
 
           sem = asyncio.Semaphore(MAX_CONCURRENCY)

@@ -40,7 +40,7 @@ jobs:
                           text = await resp.text()
                           return idx, resp.status, len(text)
                   except Exception as e:
-                      return idx, 'ERR', str(e)
+                    return idx, 'ERR', repr(e)
 
           async def main():
               async with aiohttp.ClientSession() as session:

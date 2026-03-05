@@ -26,28 +26,63 @@ jobs:
           import asyncio
           import aiohttp
           from tqdm import tqdm
-
+          
           URL = "https://projectech.kendall-r.workers.dev/"
-          MAX_CONCURRENCY = 400
-          TOTAL_REQUESTS = 999999  # 可以改成更多轮次
-
-          sem = asyncio.Semaphore(MAX_CONCURRENCY)
-
-          async def fetch(session, idx):
-              async with sem:
+          
+          CONCURRENCY = 400
+          TARGET_SUCCESS = 100000
+          TIMEOUT = 10
+          
+          headers = {
+              "User-Agent": "Mozilla/5.0",
+              "Accept": "*/*",
+              "Connection": "keep-alive"
+          }
+          
+          success_count = 0
+          lock = asyncio.Lock()
+          
+          async def worker(session, pbar):
+              global success_count
+          
+              while True:
+                  async with lock:
+                      if success_count >= TARGET_SUCCESS:
+                          return
+          
                   try:
-                      async with session.get(URL, timeout=10) as resp:
+                      async with session.get(URL, headers=headers, timeout=TIMEOUT) as resp:
                           text = await resp.text()
-                          return idx, resp.status, len(text)
+          
+                          async with lock:
+                              if success_count < TARGET_SUCCESS:
+                                  success_count += 1
+                                  pbar.update(1)
+                                  print(f"[{success_count}] Status: {resp.status}, Length: {len(text)}")
+          
+                  except asyncio.TimeoutError:
+                      # 超时不计数
+                      pass
                   except Exception as e:
-                    return idx, 'ERR', repr(e)
-
+                      # 其他错误也不计数
+                      print("ERR:", repr(e))
+          
+          
           async def main():
-              async with aiohttp.ClientSession() as session:
-                  tasks = [fetch(session, i) for i in range(TOTAL_REQUESTS)]
-                  for future in tqdm(asyncio.as_completed(tasks), total=TOTAL_REQUESTS):
-                      idx, status, length = await future
-                      print(f"[{idx}] Status: {status}, Length: {length}")
-
+              timeout = aiohttp.ClientTimeout(total=TIMEOUT)
+          
+              async with aiohttp.ClientSession(timeout=timeout) as session:
+                  pbar = tqdm(total=TARGET_SUCCESS)
+          
+                  tasks = [
+                      asyncio.create_task(worker(session, pbar))
+                      for _ in range(CONCURRENCY)
+                  ]
+          
+                  await asyncio.gather(*tasks)
+          
+                  pbar.close()
+          
+          
           asyncio.run(main())
           EOF

@@ -1,0 +1,53 @@
+name: cf worker usage
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stress_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install aiohttp tqdm
+
+      - name: Run 200 concurrent requests
+        run: |
+          python - <<'EOF'
+          import asyncio
+          import aiohttp
+          from tqdm import tqdm
+
+          URL = "https://projectech.kendall-r.workers.dev/"
+          MAX_CONCURRENCY = 500
+          TOTAL_REQUESTS = 999999  # 可以改成更多轮次
+
+          sem = asyncio.Semaphore(MAX_CONCURRENCY)
+
+          async def fetch(session, idx):
+              async with sem:
+                  try:
+                      async with session.get(URL, timeout=10) as resp:
+                          text = await resp.text()
+                          return idx, resp.status, len(text)
+                  except Exception as e:
+                      return idx, 'ERR', str(e)
+
+          async def main():
+              async with aiohttp.ClientSession() as session:
+                  tasks = [fetch(session, i) for i in range(TOTAL_REQUESTS)]
+                  for future in tqdm(asyncio.as_completed(tasks), total=TOTAL_REQUESTS):
+                      idx, status, length = await future
+                      print(f"[{idx}] Status: {status}, Length: {length}")
+
+          asyncio.run(main())
+          EOF
